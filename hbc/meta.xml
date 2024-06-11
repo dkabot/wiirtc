@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>sntp</name>
-  <coder>ErikZ</coder>
-  <version>1.2.0</version>
-  <release_date>20220409170000</release_date>
-  <short_description>NTP time synchronizer</short_description> 
-  <long_description>Synchronizes the system time to the Network Time Protocol (NTP).
-  Time zones have to be manually adjusted
+  <name>WiiRTX</name>
+  <coder>TeridaxDev</coder>
+  <version>0</version>
+  <release_date>20240611170000</release_date>
+  <short_description>WiiRTC Time Setter</short_description> 
+  <long_description>Sets the Wii's clock to a hardcoded Unix value.
   </long_description> 
 </app>
