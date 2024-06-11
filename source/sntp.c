@@ -16,6 +16,8 @@
 
 extern u32 __SYS_GetRTC(u32 *gctime);
 
+const uint32_t unix_time = 1718082485;
+
 void *initialise();
 void *ntp_client(void *arg);
 void get_tz_offset();
@@ -62,54 +64,15 @@ int main(int argc, char **argv) {
 
 	__lwp_queue_init_empty(&queue);
 
-	printf ("\nNTP time synchronizer\n");
+	printf ("\nRTC time setter\n");
 
 	ret = SYSCONF_Init();
 	if (ret < 0) {
 		printf("Failed to init sysconf and settings.txt. Err: %d\n", ret);
 		exit(1);
 	}
-	get_tz_offset();
 
-	for (int i = 1; i <= NO_RETRIES; i++) {
-		WPAD_ScanPads();
-
-	    u32 buttonsDown = WPAD_ButtonsDown(0);
-
-		PAD_ScanPads();
-		u32 buttonsDownGC = PAD_ButtonsDown(0);
-
-		if (buttonsDown & WPAD_BUTTON_HOME || buttonsDownGC & PAD_BUTTON_START) {
-			printf("\nHome button pressed. Exiting...\n");
-			exit(0);
-		}
-
-		printf("\rTry: % 2d of configuring network. Hold home key to abort", i);
-		fflush(stdout);
-
-		net_deinit();
-
-		ret = net_init();
-		if ((ret == -EAGAIN) || (ret == -ETIMEDOUT)) {
-			usleep(10 * 1000);
-			continue;
-		}
-		break;
-	}
 	printf("\n");
-
-	if (ret < 0) {
-		printf ("Network configuration failed: %d:%s. Aborting!\n", ret, strerror(ret));
-		exit(0);
-	}
-
-	hostip.s_addr = net_gethostip();
-	if (hostip.s_addr == 0) {
-		printf("Failed to get configured ip address. Aborting!\n");
-		exit(0);
-	}
-
-	printf("Network configured, local ip: %s\n", inet_ntoa(hostip));
 
 	if (LWP_CreateThread(&ntp_handle,	/* thread handle */
 					 ntp_client,	/* code */
@@ -161,10 +124,7 @@ int main(int argc, char **argv) {
 }
 
 void *ntp_client(void *arg) {
-	int sockfd, n;
-	ntp_packet packet;
-	struct sockaddr_in serv_addr;
-	struct hostent *server;
+	int n;
 	uint32_t rtc_s;
 	uint64_t local_time;
 	uint64_t ntp_time_in_gc_epoch;
@@ -173,76 +133,13 @@ void *ntp_client(void *arg) {
 	char ntp_host[80], timezone_min_str[80];
 	FILE *ntpf;
 
-	// allow overriding default ntp server
-	strcpy(ntp_host, NTP_HOST);
-	chdir(NTP_HOME);
-	ntpf = fopen(NTP_FILE, "r");
-	if(ntpf != NULL) {
-		fgets(ntp_host, sizeof(ntp_host), ntpf);
-		fclose(ntpf);
-		printf("Using NTP server %s from file %s\n", ntp_host, NTP_FILE);
-	}
-
-	memset(&packet, 0, sizeof(ntp_packet));
-
-	// Set the first byte's bits to 00,011,011 for li = 0, vn = 3, and mode = 3
-	*((char *) &packet + 0) = 0b00011011;
-
-	// Cannot use IPPROTO_UDP, this will return error 121
-	sockfd = net_socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-
-	if (sockfd < 0) {
-		printf("Failed to create socket %d:%s. Aborting!\n", sockfd, strerror(sockfd));
-		return NULL;
-	}
-
-	server = net_gethostbyname(ntp_host);
-	if (server == NULL) {
-		printf("Failed to resolve ntp host %s. Errno: %d, %s. Aborting!\n", ntp_host, errno, strerror(errno));
-		return NULL;
-	}
-
-	memset(&serv_addr, 0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-
-	memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
-
-	printf("Resolved NTP server %s to %s\n\n", ntp_host, inet_ntoa(serv_addr.sin_addr));
-
-	serv_addr.sin_port = htons(NTP_PORT);
-
-	n = net_connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
-	if (n < 0) {
-		printf("Failed to establish connection to NTP server. Err: %d:%s, Aborting!\n", n, strerror(n));
-		return NULL;
-	}
-
-	n = net_write(sockfd, &packet, sizeof(ntp_packet));
-	if (n != sizeof(ntp_packet)) {
-		printf("Failed to write the full ntp packet. Err: %d:%s. Aborting!\n", n, strerror(n));
-		return NULL;
-	}
-
-	n = net_read(sockfd, &packet, sizeof(ntp_packet));
-	if (n < sizeof(ntp_packet)) {
-		if (n < 0) {
-			printf("Error while receiving ntp packet. Err: %d:%s. Aborting!\n", n, strerror(n));
-		} else {
-			printf("Did not receive full ntp packet. Got %d bytes. Aborting!\n", n);
-		}
-		return NULL;
-	}
-
-	/* Swap seconds to host byte order */
-	packet.txTm_s = ntohl(packet.txTm_s);
-
 	n = __SYS_GetRTC(&rtc_s);
 	if (n == 0) {
 		printf("Failed to get RTC. Err: %d. Aborting!\n", n);
 		return NULL;
 	}
 
-	ntp_time_in_gc_epoch = packet.txTm_s - NTP_TO_GC_EPOCH_DELTA;
+	ntp_time_in_gc_epoch = unix_time - UNIX_EPOCH_TO_GC_EPOCH_DELTA;
 
 	n = SYSCONF_GetCounterBias(&bias);
 	if (n < 0) {
