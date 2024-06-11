@@ -16,7 +16,7 @@
 
 extern u32 __SYS_GetRTC(u32 *gctime);
 
-const uint32_t unix_time = 1718082485;
+const uint32_t unix_time = 1718100180;
 
 void *initialise();
 void *ntp_client(void *arg);

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>WiiRTX</name>
+  <name>WiiRTC</name>
   <coder>TeridaxDev</coder>
-  <version>0</version>
+  <version>0.9</version>
   <release_date>20240611170000</release_date>
   <short_description>WiiRTC Time Setter</short_description> 
   <long_description>Sets the Wii's clock to a hardcoded Unix value.
