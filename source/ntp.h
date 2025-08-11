@@ -17,18 +17,8 @@
 #define VN(packet)   (uint8_t) ((packet.li_vn_mode & 0x38) >> 3) // (vn   & 00 111 000) >> 3
 #define MODE(packet) (uint8_t) ((packet.li_vn_mode & 0x07) >> 0) // (mode & 00 000 111) >> 0
 
-#define NTP_PORT 123
-#define NTP_HOST "pool.ntp.org"
-#define NTP_HOME "sd:/apps/sntp"
-#define NTP_FILE "ntpserver.cfg"
-#define NTP_TZDB "tzdb.cfg"
-
-// some definitions required to use wplaat's networking library html.[hc]
-#define PROGRAM_NAME		"sntp"
-#define PROGRAM_VERSION		"1.1.0"
-#define MAX_LEN				1024
-#define TRACE_FILENAME		NTP_HOME "/sntp.trc"
-#define URL_TOKEN			"\"gmtOffset\": "
+#define NTP_HOME "usb:/apps/wiirtc"
+#define NTP_FILE "timestamp.cfg"
 
 typedef struct {
     uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.

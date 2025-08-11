@@ -11,16 +11,14 @@
 
 #include "ntp.h"
 #include "sysconf.h"
-#include "http.h"
-#include "trace.h"
 
 extern u32 __SYS_GetRTC(u32 *gctime);
 
-const uint32_t unix_time = 1718100180;
+static uint32_t unix_time = 1754919480;
 
 void *initialise();
 void *ntp_client(void *arg);
-void get_tz_offset();
+void get_timestamp();
 
 static void *xfb = NULL;
 GXRModeObj *rmode = NULL;
@@ -58,7 +56,6 @@ static __inline__ void __lwp_queue_init_empty(lwp_queue *queue)
 
 int main(int argc, char **argv) {
 	s32 ret;
-	struct in_addr hostip;
 
 	xfb = initialise();
 
@@ -72,6 +69,7 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
+	get_timestamp();
 	printf("\n");
 
 	if (LWP_CreateThread(&ntp_handle,	/* thread handle */
@@ -80,7 +78,7 @@ int main(int argc, char **argv) {
 					 NULL,			/* stack base */
 					 16*1024,		/* stack size */
 					 50				/* thread priority */ ) < 0) {
-		printf("Failed to create ntp clint thread. Aborting!\n");
+		printf("Failed to create RTC thread. Aborting!\n");
 		exit(0);
 	}
 
@@ -130,8 +128,7 @@ void *ntp_client(void *arg) {
 	uint64_t ntp_time_in_gc_epoch;
 	u32 bias, chk_bias;
 	s32 timezone, timezone_min;
-	char ntp_host[80], timezone_min_str[80];
-	FILE *ntpf;
+	char timezone_min_str[80];
 
 	n = __SYS_GetRTC(&rtc_s);
 	if (n == 0) {
@@ -276,64 +273,16 @@ void *initialise() {
 	return framebuffer;
 }
 //---------------------------------------------------------------------------------
-void get_tz_offset() {
+void get_timestamp() {
 //---------------------------------------------------------------------------------
+	FILE *ntpf;
 
-	char *s_fn="get_tz_offset" ;
-	FILE *tzdbf;
-	char userData1[MAX_LEN];
-	char userData2[MAX_LEN];
-	char tzurl[MAX_LEN];
-	char autosavebuf[MAX_LEN] = "manualsave";
-
-	// if config file exists, try to get timezone offset online
+	printf("Attempting to open timestamp file...\n");
 	chdir(NTP_HOME);
-	tzdbf = fopen(NTP_TZDB, "r");
-	if(tzdbf == NULL)
+	ntpf = fopen(NTP_FILE, "r");
+	if(ntpf == NULL)
 		return;
-
-	printf("Using timezone URL from file %s\n", NTP_TZDB);
-
-	// Open trace module
-	traceOpen(TRACE_FILENAME);
-	traceEvent(s_fn, 0,"%s %s Started", PROGRAM_NAME, PROGRAM_VERSION);
-
-	fgets(tzurl, sizeof(tzurl), tzdbf);
-	fgets(autosavebuf, sizeof(autosavebuf), tzdbf);
-	fclose(tzdbf);
-	tzurl[strcspn(tzurl, "\r\n")] = 0;
-
-	if(strstr(autosavebuf,"autosave") != NULL)
-	{
-		autosave = true;
-	}
-	printf("Auto save is %s\n", autosave ? "On" : "Off");
-
-	tcp_start_thread(PROGRAM_NAME, PROGRAM_VERSION,
-						"", tzurl,
-						"", "",
-						"", "",
-						"", "",
-						URL_TOKEN, userData1, userData2);
-	printf("Querying online for GMT offset...\n");
-	int tcp_state = tcp_get_state_nr();
-	for(int retries = 0; retries < 15 && tcp_state != TCP_IDLE; ++retries)
-	{
-		sleep(1);
-		tcp_state = tcp_get_state_nr();
-	}
-	if(tcp_state == TCP_IDLE)
-	{
-		gmt_offset = atoi(tcp_get_version());
-		printf("Found GMT offset online of %d\n", gmt_offset);
-	}
-	else
-	{
-		printf("GMT offset not found online\n");
-		autosave = false;
-	}
-	tcp_stop_thread();
-
-	traceEvent(s_fn, 0,"%s %s Stopped", PROGRAM_NAME, PROGRAM_VERSION);
-	traceClose();
+	printf("Timestamp file opened!\n");
+	fscanf(ntpf, "%d", &unix_time);
+	fclose(ntpf);
 }
