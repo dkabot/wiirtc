@@ -22,8 +22,6 @@ void get_timestamp();
 
 static void *xfb = NULL;
 GXRModeObj *rmode = NULL;
-static s32 gmt_offset = 0;
-static bool autosave = false;
 
 static lwp_t ntp_handle = (lwp_t) NULL;
 
@@ -102,6 +100,12 @@ int main(int argc, char **argv) {
 		if (buttonsDownGC & PAD_BUTTON_RIGHT) {
 			buttonsDown |= WPAD_BUTTON_RIGHT;
 		}
+		if (buttonsDownGC & PAD_BUTTON_UP) {
+			buttonsDown |= WPAD_BUTTON_UP;
+		}
+		if (buttonsDownGC & PAD_BUTTON_DOWN) {
+			buttonsDown |= WPAD_BUTTON_DOWN;
+		}
 		if (buttonsDownGC & PAD_BUTTON_A) {
 			buttonsDown |= WPAD_BUTTON_A;
 		}
@@ -127,8 +131,7 @@ void *ntp_client(void *arg) {
 	uint64_t local_time;
 	uint64_t ntp_time_in_gc_epoch;
 	u32 bias, chk_bias;
-	s32 timezone, timezone_min;
-	char timezone_min_str[80];
+	s32 selected = 0; // 0-5 -- hour, minute, second, month, day, year
 
 	n = __SYS_GetRTC(&rtc_s);
 	if (n == 0) {
@@ -146,13 +149,10 @@ void *ntp_client(void *arg) {
 
 	local_time = rtc_s + bias;
 
-	printf("Use left and right button to adjust time zone\nPress A to write time to system config\n");
-
-	timezone = gmt_offset / 3600;
-	timezone_min = abs(gmt_offset % 3600 / 60);
+	printf("Use left and right button to select field, up and down to modify field\nPress A to write time to system config\n");
 
 	// Calculate new bias
-	bias = ntp_time_in_gc_epoch - rtc_s + gmt_offset;
+	bias = ntp_time_in_gc_epoch - rtc_s;
 
 	uint32_t old_rtc_s = 0;
 	char time_str[80];
@@ -172,34 +172,85 @@ void *ntp_client(void *arg) {
 			local_time = rtc_s + bias + UNIX_EPOCH_TO_GC_EPOCH_DELTA;
 
 			p = localtime((time_t *) &local_time);
-			strftime(time_str, sizeof(time_str), "%H:%M:%S %B %d %Y", p);
+			// Hour (24) : Minute : Second Month Day Year
+			switch (selected) {
+				case 0: // Hour
+					strftime(time_str, sizeof(time_str), "\e[0;32m%H\e[0m:%M:%S %B %d %Y", p);
+					break;
+				case 1: // Minute
+					strftime(time_str, sizeof(time_str), "%H:\e[0;32m%M\e[0m:%S %B %d %Y", p);
+					break;
+				case 2: // Second
+					strftime(time_str, sizeof(time_str), "%H:%M:\e[0;32m%S\e[0m %B %d %Y", p);
+					break;
+				case 3: // Month
+					strftime(time_str, sizeof(time_str), "%H:%M:%S \e[0;32m%B\e[0m %d %Y", p);
+					break;
+				case 4: // Day
+					strftime(time_str, sizeof(time_str), "%H:%M:%S %B \e[0;32m%d\e[0m %Y", p);
+					break;
+				default: // Year
+					strftime(time_str, sizeof(time_str), "%H:%M:%S %B %d \e[0;32m%Y\e[0m", p);
+			}
 
-			if(timezone_min != 0)
-			{
-				snprintf(timezone_min_str, sizeof(timezone_min_str),":%d",timezone_min);
-			}
-			else
-			{
-				strcpy(timezone_min_str, "");
-			}
-			printf("\rProposed NTP system time: %s (Timezone: %+03d%s)   ", time_str, timezone, timezone_min_str);
+			printf("\rProposed RTC system time: %s   ", time_str);
 			fflush(stdout);
 		}
 
-		if (q == NULL && !autosave) {
+		if (q == NULL) {
 			LWP_YieldThread();
 			continue;
 		}
 
 		if (q && q->buttonsDown & WPAD_BUTTON_LEFT) {
-			timezone--;
-			bias -= 3600;
+			if (selected > 0) selected--;
 
 		} else if (q && q->buttonsDown & WPAD_BUTTON_RIGHT) {
-			timezone++;
-			bias += 3600;
+			if (selected < 5) selected++;
 
-		} else if (autosave || q->buttonsDown & WPAD_BUTTON_A) {
+		} if (q && q->buttonsDown & WPAD_BUTTON_UP) {
+			switch (selected) {
+				case 0: // Hour
+					bias += 3600;
+					break;
+				case 1: // Minute
+					bias += 60;
+					break;
+				case 2: // Second
+					bias += 1;
+					break;
+				case 3: // Month (30 days)
+					bias += 2592000;
+					break;
+				case 4: // Day
+					bias += 86400;
+					break;
+				default: // Year (non-leap)
+					bias += 31536000;
+			}
+
+		} else if (q && q->buttonsDown & WPAD_BUTTON_DOWN) {
+			switch (selected) {
+				case 0: // Hour
+					bias -= 3600;
+					break;
+				case 1: // Minute
+					bias -= 60;
+					break;
+				case 2: // Second
+					bias -= 1;
+					break;
+				case 3: // Month (30 days)
+					bias -= 2592000;
+					break;
+				case 4: // Day
+					bias -= 86400;
+					break;
+				default: // Year (non-leap)
+					bias -= 31536000;
+			}
+
+		} else if (q->buttonsDown & WPAD_BUTTON_A) {
 			printf("\nWriting new time (bias) to sysconf\n");
 			n = SYSCONF_SetCounterBias(bias);
 			if (n < 0) {
@@ -231,11 +282,6 @@ void *ntp_client(void *arg) {
 			strftime(time_str, sizeof(time_str), "%H:%M:%S %B %d %Y", p);
 
 			printf("Time successfully updated to: %s\n", time_str);
-			if(autosave)
-			{
-				printf("Auto save is On and completed so exiting...\n");
-				exit(0);
-			}
 			printf("You may now terminate this program by pressing the home key\n(or continue to adjust the time zones)\n");
 		}
 		free(q);
@@ -272,9 +318,11 @@ void *initialise() {
 
 	return framebuffer;
 }
+
 //---------------------------------------------------------------------------------
 void get_timestamp() {
 //---------------------------------------------------------------------------------
+
 	FILE *ntpf;
 
 	printf("Attempting to open timestamp file...\n");
