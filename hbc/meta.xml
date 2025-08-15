@@ -2,8 +2,8 @@
 <app version="1">
   <name>WiiRTC</name>
   <coder>dkabot and TeridaxDev</coder>
-  <version>0.97</version>
-  <release_date>20250815090000</release_date>
+  <version>0.98</version>
+  <release_date>20250815200000</release_date>
   <short_description>WiiRTC Time Setter</short_description> 
   <long_description>Sets the Wii's real-time clock.
   </long_description> 
